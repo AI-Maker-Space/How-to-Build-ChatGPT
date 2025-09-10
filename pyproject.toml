@@ -1,0 +1,12 @@
+[project]
+name = "openai-responses-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "jupyter>=1.1.1",
+    "openai>=1.107.1",
+    "pandas>=2.3.2",
+    "plotly>=6.3.0",
+]
