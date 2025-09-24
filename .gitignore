@@ -1,5 +1,7 @@
 .venv/
 .env
+.env.local
 uv.lock
 node_modules/
 .next/
+.vercel

@@ -1,0 +1,46 @@
+body {
+  background-color: #000;
+  font-family: "Courier New", Courier, monospace;
+  color: #00ff00;
+}
+
+header {
+  background-color: #003300;
+  color: #00ff00;
+  padding: 1rem;
+  text-align: center;
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+main {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 1px solid #00ff00;
+  width: 80%;
+  margin: 2rem auto;
+  padding: 2rem;
+  box-shadow: 0 0 10px #00ff00;
+}
+
+input {
+  background-color: #000;
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  padding: 0.5rem;
+  width: 100%;
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+button {
+  background-color: #003300;
+  color: #00ff00;
+  border: 1px solid #00ff00;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+}

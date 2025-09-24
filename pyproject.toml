@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.117.1",
     "jupyter>=1.1.1",
     "openai>=1.107.1",
     "openai-agents>=0.3.0",
@@ -12,4 +13,5 @@ dependencies = [
     "plotly>=6.3.0",
     "pydantic>=2.11.7",
     "rich>=14.1.0",
+    "uvicorn>=0.35.0",
 ]
