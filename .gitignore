@@ -1,5 +1,5 @@
 .venv/
 .env
 uv.lock
-/chatgpt/node_modules
-/chatgpt/.next
+node_modules/
+.next/
