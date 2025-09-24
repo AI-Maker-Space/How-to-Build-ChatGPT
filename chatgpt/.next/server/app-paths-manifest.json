@@ -1,0 +1,6 @@
+{
+  "/api/config/route": "app/api/config/route.js",
+  "/api/threads/route": "app/api/threads/route.js",
+  "/api/threads/[threadId]/messages/route": "app/api/threads/[threadId]/messages/route.js",
+  "/api/threads/[threadId]/route": "app/api/threads/[threadId]/route.js"
+}
