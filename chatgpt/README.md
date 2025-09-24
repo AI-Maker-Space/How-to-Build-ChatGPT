@@ -1,84 +1,243 @@
-# ChatGPT Clone (OpenAI Responses API)
+# ChatGPT Clone
 
-This project implements a ChatGPT-style conversational app using the OpenAI Responses API. It mirrors the modern ChatGPT product experience (sidebar thread list, chat composer, configurable instructions) while showcasing:
+A performant ChatGPT-like application with thread persistence, Google authentication, and model selection capabilities.
 
-- **Responses API** for primary completion flow
-- **Connectors** support so you can bring in external knowledge bases
-- **Tools** to execute custom server-side functions during a conversation
-- **Persistent conversation threads** backed by Upstash Redis (or an in-memory fallback for quick local testing)
+## Features
 
-The app lives in the `chatgpt` directory and is optimized for deployment on Vercel.
+- 🤖 **Multiple AI Models**: Choose between GPT-5, GPT-4.1 Mini, and GPT-4.1 Nano
+- 💬 **Thread Persistence**: All conversations are saved and can be resumed
+- 🔐 **Google Authentication**: Secure login with Google OAuth
+- ⚡ **Real-time Streaming**: See AI responses as they're generated
+- 🎨 **Beautiful UI**: Clean, modern interface similar to ChatGPT
+- 🚀 **Vercel Ready**: Optimized for deployment on Vercel
+- 📱 **Responsive Design**: Works seamlessly on desktop and mobile
 
-## Quick Start
+## Tech Stack
+
+### Frontend
+- **Next.js 15** with TypeScript
+- **React 19** with Hooks
+- **Tailwind CSS** for styling
+- **Zustand** for state management
+- **React Markdown** for message rendering
+- **Google OAuth** for authentication
+
+### Backend
+- **FastAPI** for high-performance API
+- **SQLAlchemy** with async support
+- **PostgreSQL** for data persistence
+- **OpenAI API** with new Responses API
+- **Server-Sent Events** for streaming
+
+## Setup Instructions
+
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.9+
+- PostgreSQL database
+- OpenAI API key
+- Google OAuth credentials (optional)
+
+### Environment Configuration
+
+1. Copy the environment template:
+```bash
+cp env.template .env
+```
+
+2. Configure the following environment variables:
+
+#### Backend (.env in /backend)
+```env
+# Required
+OPENAI_API_KEY=your-openai-api-key
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/chatgpt
+SECRET_KEY=generate-a-secure-secret-key
+
+# Optional (for production)
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+FRONTEND_URL=https://your-frontend-url.vercel.app
+```
+
+#### Frontend (.env.local)
+```env
+# Backend URL
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Optional (for Google Auth)
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+
+### Local Development
+
+#### 1. Setup Backend
 
 ```bash
-# from the chatgpt directory
+cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Setup database (ensure PostgreSQL is running)
+createdb chatgpt
+
+# Run backend server
+uvicorn app:app --reload --port 8000
+```
+
+#### 2. Setup Frontend
+
+```bash
+cd ..  # Return to chatgpt directory
+
+# Install dependencies
 npm install
+
+# Run development server
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Visit http://localhost:3000 to use the application.
 
-## Required Environment Variables
+### Database Setup
 
-Create a `.env.local` file for local development (Vercel uses the same names in the dashboard):
+The application uses PostgreSQL for data persistence. Tables are automatically created on first run.
 
+For production, use a managed PostgreSQL service like:
+- Vercel Postgres
+- Supabase
+- Neon
+- Railway
+
+## Deployment
+
+### Deploy to Vercel
+
+#### Frontend Deployment
+
+1. Push your code to GitHub
+2. Import project in Vercel
+3. Configure environment variables:
+   - `NEXT_PUBLIC_API_URL`: Your backend API URL
+   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID`: Google OAuth client ID
+
+#### Backend Deployment
+
+The backend can be deployed separately to:
+
+1. **Vercel Functions** (serverless)
+2. **Railway** (recommended for WebSocket support)
+3. **Render**
+4. **DigitalOcean App Platform**
+
+Example for Railway:
 ```bash
-OPENAI_API_KEY=sk-...
-# Optional overrides
-OPENAI_MODEL=gpt-4.1-mini
-OPENAI_MODELS=gpt-4.1-mini,gpt-4.1,gpt-4.1-nano
-# Semi-colon separated list in the format id|Label|Optional description
-OPENAI_CONNECTORS=conn_123|Company Docs|Vector search over docs;conn_456|Notion|Access team workspace
-
-# Upstash Redis (recommended for persistence across deploys & sessions)
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
+cd backend
+railway login
+railway init
+railway add
+railway up
 ```
 
-- **`OPENAI_MODELS`** controls the buttons in the model switcher. If omitted the UI shows the default model only.
-- **`OPENAI_CONNECTORS`** lets you expose configured Connectors in a toggle list. The server automatically forwards selected connector IDs to `client.responses.create(...)`.
-- If **`UPSTASH_REDIS_*`** are not provided, the app falls back to an in-memory store (conversations reset when the server restarts). For production, configure Upstash Redis or any REST-compatible Redis instance.
+### Production Considerations
 
-## Available Tools
+1. **Database**: Use a production PostgreSQL instance
+2. **Secrets**: Store sensitive keys in environment variables
+3. **CORS**: Update allowed origins in backend
+4. **SSL**: Ensure HTTPS is enabled
+5. **Rate Limiting**: Consider adding rate limits
+6. **Monitoring**: Add error tracking (Sentry, etc.)
 
-Two example tools are wired into the model:
+## API Endpoints
 
-1. `get_current_time` — returns the current time (with optional timezone conversion).
-2. `lookup_company_faq` — searches `data/company_faq.json` for internal answers.
+### Authentication
+- `POST /api/auth/google` - Google OAuth login
 
-You can extend `lib/tools.ts` with additional tools. Each entry defines the OpenAI tool schema **and** the handler that returns tool outputs. The API route automatically handles the tool-call → tool-output loop via `responses.submitToolOutputs`.
+### Threads
+- `GET /api/threads` - Get all user threads
+- `POST /api/threads` - Create new thread
+- `GET /api/threads/{id}` - Get thread with messages
+- `DELETE /api/threads/{id}` - Delete thread
 
-## Deployment (Vercel)
+### Messages
+- `POST /api/threads/{id}/messages` - Add message to thread
+- `POST /api/chat` - Stream chat response (SSE)
 
-1. Push the project to a Git repository.
-2. Create a new Vercel project and import this directory.
-3. In *Project Settings → Environment Variables*, add the variables listed above.
-4. Deploy. Vercel automatically runs `npm install` and `npm run build`.
+## Models Configuration
 
-### Vercel KV / Alternative Persistence
+The application supports three AI models:
 
-The project defaults to Upstash Redis via REST. If you prefer Vercel KV, provision an Upstash Redis database through Vercel, then copy the `UPSTASH_REDIS_*` secrets into the project settings. No code changes required.
+- **GPT-5**: Most capable model (mapped to gpt-4-turbo-preview)
+- **GPT-4.1 Mini**: Balanced performance (mapped to gpt-4o-mini)
+- **GPT-4.1 Nano**: Fast and efficient (mapped to gpt-3.5-turbo)
 
-## Project Structure
+Models use the OpenAI Responses API when available, with automatic fallback to standard completions.
 
+## Development Tips
+
+### Hot Reload
+Both frontend and backend support hot reload in development mode.
+
+### Database Migrations
+For production, consider using Alembic for database migrations:
+```bash
+cd backend
+alembic init alembic
+alembic revision --autogenerate -m "Initial migration"
+alembic upgrade head
 ```
-app/
-  page.tsx                # ChatGPT interface (sidebar + chat area)
-  api/                    # REST endpoints for threads, messages, config
-components/               # UI building blocks (sidebar, composer, message list)
-lib/
-  api.ts                  # Client-side data helpers
-  store.ts                # Thread persistence (Redis + in-memory fallback)
-  tools.ts                # Tool definitions & handlers
-config/connectors.ts      # Parses connector metadata from env
+
+### Testing
+```bash
+# Frontend tests
+npm test
+
+# Backend tests
+cd backend
+pytest
 ```
 
-## Notes
+## Troubleshooting
 
-- Thread titles auto-update based on the first user message.
-- The message list renders Markdown (with GFM) just like ChatGPT.
-- Tool calls and results show inline cards in the transcript to aid debugging.
-- The UI stores the last opened thread ID in `localStorage` so users resume where they left off.
+### Common Issues
 
-For questions or to extend the app (e.g., add streaming responses, authentication, or organization-specific tools), build on the provided API routes and components.
+1. **Database connection errors**: Ensure PostgreSQL is running and DATABASE_URL is correct
+2. **CORS errors**: Check FRONTEND_URL in backend environment
+3. **Auth issues**: Verify Google Client ID matches in frontend and backend
+4. **OpenAI errors**: Check API key and rate limits
+
+### Debug Mode
+
+Enable debug logging:
+```bash
+# Backend
+DEBUG=true uvicorn app:app --reload
+
+# Frontend
+npm run dev -- --debug
+```
+
+## License
+
+MIT
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Open a Pull Request
+
+## Support
+
+For issues and questions, please open a GitHub issue or contact support.
+
+---
+
+Built with ❤️ using the OpenAI Responses API

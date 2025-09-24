@@ -1,9 +1,13 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { Toaster } from 'react-hot-toast';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "ChatGPT Clone",
-  description: "An OpenAI Responses API powered ChatGPT-style experience.",
+  title: 'ChatGPT Clone',
+  description: 'A ChatGPT-like interface powered by OpenAI',
 };
 
 export default function RootLayout({
@@ -13,8 +17,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-surface text-gray-900">
+      <body className={inter.className}>
         {children}
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#333',
+              color: '#fff',
+            },
+          }}
+        />
       </body>
     </html>
   );
