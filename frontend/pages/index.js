@@ -214,14 +214,14 @@ export default function Home() {
   };
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#343541', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif' }}>
       
       {/* API Key Modal */}
       {showApiKeyModal && (
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
+          background: 'rgba(0, 0, 0, 0.7)',
           zIndex: 50,
           display: 'flex',
           alignItems: 'center',
@@ -229,15 +229,15 @@ export default function Home() {
           padding: '1rem'
         }}>
           <div style={{
-            background: 'white',
+            background: '#2a2b32',
             borderRadius: '0.5rem',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
             maxWidth: '28rem',
             width: '100%',
             padding: '1.5rem'
           }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Enter OpenAI API Key</h2>
-            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem', color: '#ececf1' }}>Enter OpenAI API Key</h2>
+            <p style={{ color: '#c5c5d2', fontSize: '0.875rem', marginBottom: '1rem' }}>
               Your API key is stored locally and never sent to our servers.
             </p>
             <input
@@ -248,9 +248,11 @@ export default function Home() {
               style={{
                 width: '100%',
                 padding: '0.5rem 0.75rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #565869',
                 borderRadius: '0.375rem',
-                outline: 'none'
+                outline: 'none',
+                background: '#40414f',
+                color: '#ececf1'
               }}
               onKeyDown={(e) => e.key === 'Enter' && saveApiKey()}
             />
@@ -259,7 +261,7 @@ export default function Home() {
                 onClick={() => setShowApiKeyModal(false)}
                 style={{
                   padding: '0.5rem 1rem',
-                  color: '#4b5563',
+                  color: '#c5c5d2',
                   background: 'transparent',
                   border: 'none',
                   borderRadius: '0.375rem',
@@ -273,8 +275,8 @@ export default function Home() {
                 disabled={!apiKey}
                 style={{
                   padding: '0.5rem 1rem',
-                  background: apiKey ? '#000' : '#e5e7eb',
-                  color: apiKey ? 'white' : '#9ca3af',
+                  background: apiKey ? '#10a37f' : '#2e3039',
+                  color: apiKey ? 'white' : '#6e6e80',
                   border: 'none',
                   borderRadius: '0.375rem',
                   cursor: apiKey ? 'pointer' : 'not-allowed'
@@ -289,24 +291,25 @@ export default function Home() {
 
       {/* Header */}
       <div style={{
-        borderBottom: '1px solid #e5e7eb',
+        borderBottom: '1px solid rgba(255,255,255,0.1)',
         padding: '0.75rem 1rem',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        background: '#343541'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <h1 style={{ fontSize: '1.125rem', fontWeight: 600 }}>ChatGPT</h1>
-          <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>with Responses API</span>
+          <h1 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#ececf1' }}>ChatGPT</h1>
+          <span style={{ fontSize: '0.875rem', color: '#8e8ea0' }}>with Responses API</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button
             onClick={startNewChat}
             style={{
               fontSize: '0.875rem',
-              color: '#fff',
-              background: '#000',
-              border: '1px solid #000',
+              color: '#ececf1',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.2)',
               cursor: 'pointer',
               padding: '0.5rem 1rem',
               borderRadius: '0.375rem',
@@ -315,8 +318,8 @@ export default function Home() {
               alignItems: 'center',
               gap: '0.5rem'
             }}
-            onMouseOver={(e) => e.currentTarget.style.background = '#1f2937'}
-            onMouseOut={(e) => e.currentTarget.style.background = '#000'}
+            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
           >
             <span style={{ fontSize: '1rem', pointerEvents: 'none' }}>+</span> 
             <span style={{ pointerEvents: 'none' }}>New Chat</span>
@@ -325,20 +328,20 @@ export default function Home() {
             onClick={() => setShowApiKeyModal(true)}
             style={{
               fontSize: '0.875rem',
-              color: '#4b5563',
+              color: '#8e8ea0',
               background: 'transparent',
-              border: '1px solid #d1d5db',
+              border: '1px solid rgba(255,255,255,0.2)',
               cursor: 'pointer',
               padding: '0.5rem 1rem',
               borderRadius: '0.375rem'
             }}
             onMouseOver={(e) => {
-              e.target.style.borderColor = '#9ca3af';
-              e.target.style.color = '#1f2937';
+              e.target.style.borderColor = 'rgba(255,255,255,0.3)';
+              e.target.style.color = '#ececf1';
             }}
             onMouseOut={(e) => {
-              e.target.style.borderColor = '#d1d5db';
-              e.target.style.color = '#4b5563';
+              e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+              e.target.style.color = '#8e8ea0';
             }}
           >
             API Settings
@@ -347,7 +350,7 @@ export default function Home() {
       </div>
 
       {/* Messages Area */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', background: '#343541' }}>
         <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '1rem' }}>
           {messages.length === 0 ? (
             <div style={{
@@ -359,10 +362,10 @@ export default function Home() {
               textAlign: 'center',
               padding: '2rem'
             }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                How can I help you today?
+              <h2 style={{ fontSize: '2rem', fontWeight: 400, marginBottom: '0.5rem', color: '#ececf1' }}>
+                Where should we begin?
               </h2>
-              <p style={{ color: '#6b7280' }}>
+              <p style={{ color: '#8e8ea0', fontSize: '0.875rem' }}>
                 Start a conversation or upload a file to begin
               </p>
             </div>
@@ -373,7 +376,7 @@ export default function Home() {
                   key={idx}
                   style={{
                     padding: '1.5rem 1rem',
-                    background: msg.role === 'assistant' ? '#f9fafb' : 'white'
+                    background: msg.role === 'assistant' ? '#444654' : '#343541'
                   }}
                 >
                   <div style={{ display: 'flex', gap: '1rem', maxWidth: '48rem', margin: '0 auto' }}>
@@ -381,14 +384,14 @@ export default function Home() {
                       <div style={{
                         width: '32px',
                         height: '32px',
-                        borderRadius: '50%',
+                        borderRadius: '4px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: 'white',
                         fontSize: '0.875rem',
                         fontWeight: 600,
-                        background: msg.role === 'user' ? '#8b5cf6' : '#10b981'
+                        background: msg.role === 'user' ? '#5436da' : '#10a37f'
                       }}>
                         {msg.role === 'user' ? 'U' : 'AI'}
                       </div>
@@ -402,17 +405,17 @@ export default function Home() {
                               alignItems: 'center',
                               gap: '0.25rem',
                               padding: '0.25rem 0.5rem',
-                              background: '#f3f4f6',
+                              background: 'rgba(255,255,255,0.1)',
                               borderRadius: '0.25rem',
                               fontSize: '0.75rem',
-                              color: '#4b5563'
+                              color: '#c5c5d2'
                             }}>
                               📎 {file.name}
                             </div>
                           ))}
                         </div>
                       )}
-                      <div style={{ color: '#1f2937', whiteSpace: 'pre-wrap', wordWrap: 'break-word', lineHeight: 1.5 }}>
+                      <div style={{ color: '#ececf1', whiteSpace: 'pre-wrap', wordWrap: 'break-word', lineHeight: 1.5 }}>
                         {msg.content || (loading && idx === messages.length - 1 && '●●●')}
                       </div>
                     </div>
@@ -427,9 +430,9 @@ export default function Home() {
 
       {/* Input Area */}
       <div style={{
-        borderTop: '1px solid #e5e7eb',
+        borderTop: '1px solid rgba(255,255,255,0.1)',
         padding: '1rem',
-        background: '#fff'
+        background: '#343541'
       }}>
         <div style={{ maxWidth: '48rem', margin: '0 auto' }}>
           {/* File attachments display */}
@@ -441,25 +444,25 @@ export default function Home() {
                   alignItems: 'center',
                   gap: '0.5rem',
                   padding: '0.375rem 0.75rem',
-                  background: '#f3f4f6',
+                  background: 'rgba(255,255,255,0.1)',
                   borderRadius: '0.5rem',
                   fontSize: '0.875rem'
                 }}>
-                  📄 <span style={{ color: '#1f2937' }}>{file.name}</span>
-                  <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>({formatFileSize(file.size)})</span>
+                  📄 <span style={{ color: '#ececf1' }}>{file.name}</span>
+                  <span style={{ color: '#8e8ea0', fontSize: '0.75rem' }}>({formatFileSize(file.size)})</span>
                   <button
                     onClick={() => removeFile(file.id)}
                     style={{
                       marginLeft: '0.25rem',
-                      color: '#9ca3af',
+                      color: '#8e8ea0',
                       background: 'transparent',
                       border: 'none',
                       cursor: 'pointer',
                       padding: 0,
                       fontSize: '1rem'
                     }}
-                    onMouseOver={(e) => e.target.style.color = '#4b5563'}
-                    onMouseOut={(e) => e.target.style.color = '#9ca3af'}
+                    onMouseOver={(e) => e.target.style.color = '#ececf1'}
+                    onMouseOut={(e) => e.target.style.color = '#8e8ea0'}
                   >
                     ×
                   </button>
@@ -480,18 +483,20 @@ export default function Home() {
                   width: '100%',
                   padding: '0.75rem',
                   paddingRight: '7rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '0.5rem',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '0.75rem',
                   outline: 'none',
                   resize: 'none',
                   fontFamily: 'inherit',
                   fontSize: '1rem',
                   minHeight: '52px',
                   maxHeight: '200px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  background: '#40414f',
+                  color: '#ececf1'
                 }}
-                onFocus={(e) => e.target.style.borderColor = '#000'}
-                onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                onFocus={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.2)'}
                 rows="1"
               />
               
@@ -510,8 +515,8 @@ export default function Home() {
                   style={{
                     padding: '0.375rem',
                     borderRadius: '0.25rem',
-                    background: useResearch ? '#000' : 'transparent',
-                    color: useResearch ? 'white' : '#9ca3af',
+                    background: useResearch ? '#10a37f' : 'transparent',
+                    color: useResearch ? 'white' : '#8e8ea0',
                     border: 'none',
                     cursor: 'pointer',
                     display: 'flex',
@@ -521,10 +526,10 @@ export default function Home() {
                   }}
                   title={useResearch ? "Research enabled" : "Enable research"}
                   onMouseOver={(e) => {
-                    if (!useResearch) e.target.style.color = '#4b5563';
+                    if (!useResearch) e.target.style.color = '#c5c5d2';
                   }}
                   onMouseOut={(e) => {
-                    if (!useResearch) e.target.style.color = '#9ca3af';
+                    if (!useResearch) e.target.style.color = '#8e8ea0';
                   }}
                 >
                   🔍
@@ -542,7 +547,7 @@ export default function Home() {
                   onClick={() => fileInputRef.current?.click()}
                   style={{
                     padding: '0.375rem',
-                    color: '#9ca3af',
+                    color: '#8e8ea0',
                     background: 'transparent',
                     border: 'none',
                     borderRadius: '0.25rem',
@@ -553,8 +558,8 @@ export default function Home() {
                     transition: 'color 0.2s'
                   }}
                   title="Add photos & files"
-                  onMouseOver={(e) => e.target.style.color = '#4b5563'}
-                  onMouseOut={(e) => e.target.style.color = '#9ca3af'}
+                  onMouseOver={(e) => e.target.style.color = '#c5c5d2'}
+                  onMouseOut={(e) => e.target.style.color = '#8e8ea0'}
                 >
                   📎
                 </button>
@@ -566,7 +571,7 @@ export default function Home() {
                   style={{
                     padding: '0.375rem',
                     borderRadius: '0.25rem',
-                    background: (loading || (!userMessage.trim() && currentFiles.length === 0)) ? '#e5e7eb' : '#000',
+                    background: (loading || (!userMessage.trim() && currentFiles.length === 0)) ? '#2e3039' : '#10a37f',
                     color: 'white',
                     border: 'none',
                     cursor: (loading || (!userMessage.trim() && currentFiles.length === 0)) ? 'not-allowed' : 'pointer',
@@ -589,11 +594,11 @@ export default function Home() {
             alignItems: 'center',
             gap: '0.75rem',
             fontSize: '0.75rem',
-            color: '#6b7280'
+            color: '#8e8ea0'
           }}>
             {useResearch && (
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <span style={{ color: '#10b981' }}>✓</span>
+                <span style={{ color: '#10a37f' }}>✓</span>
                 Research enabled
               </span>
             )}
