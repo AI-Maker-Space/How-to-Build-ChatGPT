@@ -3,15 +3,19 @@ name = "openai-responses-api"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.117.1",
-    "jupyter>=1.1.1",
     "openai>=1.107.1",
+    "pydantic>=2.11.7",
+    "uvicorn>=0.35.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyter>=1.1.1",
     "openai-agents>=0.3.0",
     "pandas>=2.3.2",
     "plotly>=6.3.0",
-    "pydantic>=2.11.7",
     "rich>=14.1.0",
-    "uvicorn>=0.35.0",
 ]

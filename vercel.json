@@ -4,7 +4,10 @@
       { "src": "frontend/package.json", "use": "@vercel/next" },
       { 
         "src": "api/app.py",
-        "use": "@vercel/python"
+        "use": "@vercel/python",
+        "config": {
+          "maxLambdaSize": "50mb"
+        }
       }
     ],
     "routes": [
