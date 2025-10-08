@@ -9,12 +9,12 @@ dependencies = [
     "openai>=1.107.1",
     "pydantic>=2.11.7",
     "uvicorn>=0.35.0",
+    "openai-agents>=0.3.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "jupyter>=1.1.1",
-    "openai-agents>=0.3.0",
     "pandas>=2.3.2",
     "plotly>=6.3.0",
     "rich>=14.1.0",
