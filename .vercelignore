@@ -1,0 +1,19 @@
+# Exclude notebooks and development files
+*.ipynb
+*.pdf
+debug_test.py
+test_api.py
+
+# Exclude Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Exclude data files that aren't needed
+data/*.pdf
+
+# Exclude development dependencies
+pyproject copy.toml
+
