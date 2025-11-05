@@ -1,0 +1,24 @@
+# Ruff configuration for linting and formatting
+line-length = 100
+target-version = "py39"
+
+[lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with 4 spaces
+indent-style = "space"

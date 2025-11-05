@@ -28,6 +28,24 @@ except ImportError:
     AGENTS_SDK_AVAILABLE = False
     print("Warning: OpenAI Agents SDK not available. Research functionality will be limited.")
 
+# Import deep research module
+try:
+    from deep_research import (
+        DeepResearchManager,
+        ClarificationAgent,
+        PromptEnricher,
+        WebhookHandler,
+        DeepResearchRequest,
+        ClarificationRequest,
+        PromptEnrichmentRequest,
+        DeepResearchModel,
+        ResearchDepth
+    )
+    DEEP_RESEARCH_AVAILABLE = True
+except ImportError as e:
+    DEEP_RESEARCH_AVAILABLE = False
+    print(f"Warning: Deep Research module not available: {e}")
+
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Responses API Chat")
 
@@ -44,6 +62,11 @@ app.add_middleware(
 # Global storage for file metadata and vector store IDs
 uploaded_files_metadata: Dict[str, Dict[str, Any]] = {}
 user_vector_stores: Dict[str, str] = {}  # Store vector store IDs per session/user
+
+# Deep research managers (keyed by API key for simplicity)
+deep_research_managers: Dict[str, DeepResearchManager] = {}
+clarification_agents: Dict[str, ClarificationAgent] = {}
+prompt_enrichers: Dict[str, PromptEnricher] = {}
 
 # Define the data model for chat requests
 class ChatRequest(BaseModel):
@@ -66,6 +89,21 @@ class ResearchResult(BaseModel):
     findings: List[str]
     sources: List[str]
     summary: str
+
+# Define the data model for deep research requests
+class DeepResearchApiRequest(BaseModel):
+    query: str
+    api_key: str
+    model: Optional[str] = "o3-deep-research"  # o3-deep-research or o4-mini-deep-research
+    use_web_search: Optional[bool] = True
+    use_file_search: Optional[bool] = False
+    use_code_interpreter: Optional[bool] = False
+    vector_store_ids: Optional[List[str]] = None
+    background: Optional[bool] = True
+    webhook_url: Optional[str] = None
+    max_tool_calls: Optional[int] = None
+    clarify_first: Optional[bool] = False
+    enrich_prompt: Optional[bool] = True
 
 def create_file(client: OpenAI, file_content: bytes, file_name: str) -> str:
     """
@@ -513,6 +551,175 @@ async def get_vector_stores():
         }
     }
 
+# Deep Research Endpoints
+
+@app.post("/api/deep-research")
+async def start_deep_research(request: DeepResearchApiRequest):
+    """Start a deep research task using OpenAI's deep research models"""
+    if not DEEP_RESEARCH_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Deep Research functionality not available")
+    
+    try:
+        # Get or create deep research manager for this API key
+        if request.api_key not in deep_research_managers:
+            deep_research_managers[request.api_key] = DeepResearchManager(request.api_key)
+        
+        manager = deep_research_managers[request.api_key]
+        
+        # Handle clarification if requested
+        clarifications = None
+        if request.clarify_first:
+            if request.api_key not in clarification_agents:
+                clarification_agents[request.api_key] = ClarificationAgent(request.api_key)
+            
+            agent = clarification_agents[request.api_key]
+            clarification_req = ClarificationRequest(user_input=request.query)
+            clarification_resp = await agent.generate_clarifications(clarification_req)
+            clarifications = clarification_resp.questions
+        
+        # Handle prompt enrichment if requested
+        enriched_query = request.query
+        if request.enrich_prompt:
+            if request.api_key not in prompt_enrichers:
+                prompt_enrichers[request.api_key] = PromptEnricher(request.api_key)
+            
+            enricher = prompt_enrichers[request.api_key]
+            enrichment_req = PromptEnrichmentRequest(user_input=request.query)
+            enrichment_resp = await enricher.enrich_prompt(enrichment_req)
+            enriched_query = enrichment_resp.enriched_prompt
+        
+        # Prepare deep research request
+        deep_req = DeepResearchRequest(
+            query=enriched_query,
+            model=DeepResearchModel(request.model),
+            background=request.background,
+            max_tool_calls=request.max_tool_calls,
+            vector_store_ids=request.vector_store_ids,
+            use_web_search=request.use_web_search,
+            use_code_interpreter=request.use_code_interpreter,
+            webhook_url=request.webhook_url
+        )
+        
+        # Start the research
+        response = await manager.start_deep_research(deep_req)
+        
+        # Return response with clarifications if generated
+        # Use model_dump_json for proper datetime serialization
+        result = json.loads(response.model_dump_json())
+        if clarifications:
+            result["clarification_questions"] = clarifications
+        
+        return result
+        
+    except Exception as e:
+        print(f"Deep research error: {e}")
+        raise HTTPException(status_code=500, detail=f"Deep research error: {str(e)}")
+
+@app.get("/api/deep-research/{research_id}/status")
+async def get_deep_research_status(research_id: str, api_key: str):
+    """Get the status of a deep research task"""
+    if not DEEP_RESEARCH_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Deep Research functionality not available")
+    
+    try:
+        # If no manager exists (e.g., after server restart), create one and return a "not found" status
+        if api_key not in deep_research_managers:
+            # Return a response indicating the research is no longer available
+            return {
+                "id": research_id,
+                "status": "not_found",
+                "query": "Unknown",
+                "error": "Research task not found. It may have expired due to server restart.",
+                "created_at": None,
+                "completed_at": None
+            }
+        
+        manager = deep_research_managers[api_key]
+        response = await manager.get_research_status(research_id)
+        
+        # Ensure proper serialization with datetime handling
+        return json.loads(response.model_dump_json())
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        print(f"Status check error: {e}")
+        raise HTTPException(status_code=500, detail=f"Status check error: {str(e)}")
+
+@app.delete("/api/deep-research/{research_id}")
+async def cancel_deep_research(research_id: str, api_key: str = Form(...)):
+    """Cancel an active deep research task"""
+    if not DEEP_RESEARCH_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Deep Research functionality not available")
+    
+    try:
+        if api_key not in deep_research_managers:
+            raise HTTPException(status_code=404, detail="No research manager found for this API key")
+        
+        manager = deep_research_managers[api_key]
+        success = await manager.cancel_research(research_id)
+        
+        if success:
+            return {"message": f"Research {research_id} cancelled successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Research task not found or already completed")
+            
+    except Exception as e:
+        print(f"Cancel error: {e}")
+        raise HTTPException(status_code=500, detail=f"Cancel error: {str(e)}")
+
+@app.post("/api/deep-research/clarify")
+async def get_clarifications(request: ClarificationRequest, api_key: str = Form(...)):
+    """Get clarification questions for a research query"""
+    if not DEEP_RESEARCH_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Deep Research functionality not available")
+    
+    try:
+        if api_key not in clarification_agents:
+            clarification_agents[api_key] = ClarificationAgent(api_key)
+        
+        agent = clarification_agents[api_key]
+        response = await agent.generate_clarifications(request)
+        
+        return json.loads(response.model_dump_json())
+        
+    except Exception as e:
+        print(f"Clarification error: {e}")
+        raise HTTPException(status_code=500, detail=f"Clarification error: {str(e)}")
+
+@app.post("/api/deep-research/enrich")
+async def enrich_prompt(request: PromptEnrichmentRequest, api_key: str = Form(...)):
+    """Enrich a user prompt for better deep research results"""
+    if not DEEP_RESEARCH_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Deep Research functionality not available")
+    
+    try:
+        if api_key not in prompt_enrichers:
+            prompt_enrichers[api_key] = PromptEnricher(api_key)
+        
+        enricher = prompt_enrichers[api_key]
+        response = await enricher.enrich_prompt(request)
+        
+        return json.loads(response.model_dump_json())
+        
+    except Exception as e:
+        print(f"Enrichment error: {e}")
+        raise HTTPException(status_code=500, detail=f"Enrichment error: {str(e)}")
+
+@app.post("/api/deep-research/webhook")
+async def handle_webhook(data: Dict[str, Any]):
+    """Handle webhook notifications from OpenAI for deep research completion"""
+    if not DEEP_RESEARCH_AVAILABLE:
+        return {"status": "ignored", "reason": "Deep Research not available"}
+    
+    try:
+        await WebhookHandler.handle_webhook(data)
+        return {"status": "processed"}
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return {"status": "error", "detail": str(e)}
+
 # Define a health check endpoint to verify API status
 @app.get("/api/health")
 async def health_check():
@@ -520,10 +727,12 @@ async def health_check():
         "status": "ok",
         "responses_api": "enabled",
         "research": "enabled",
+        "deep_research": "enabled" if DEEP_RESEARCH_AVAILABLE else "disabled",
         "file_upload": "enabled",
         "vector_stores": "enabled",
         "active_vector_stores": len(user_vector_stores),
-        "uploaded_files": len(uploaded_files_metadata)
+        "uploaded_files": len(uploaded_files_metadata),
+        "active_deep_research": sum(len(manager.active_research) for manager in deep_research_managers.values()) if DEEP_RESEARCH_AVAILABLE else 0
     }
 
 # Entry point for running the application directly

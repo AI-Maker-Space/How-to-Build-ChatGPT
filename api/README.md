@@ -13,42 +13,41 @@ A FastAPI service that provides ChatGPT-like functionality using the OpenAI Resp
 
 ## 📋 Prerequisites
 
-- Python 3.8+
+- Python 3.9+
 - OpenAI API key
 - Optional: OpenAI Agents SDK for research features
 
 ## 🛠️ Installation
 
-### Basic Setup
+### Basic Setup with UV
 ```bash
-# Install required dependencies
-pip install -r requirements.txt
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh  # Linux/Mac
+# Or on Windows: irm https://astral.sh/uv/install.ps1 | iex
+
+# Create virtual environment and install dependencies
+uv venv
+uv pip install -r requirements.txt
 ```
 
 ### With Research Features (Optional)
 ```bash
 # Install the Agents SDK for enhanced research
-pip install agents
-```
-
-### Using UV Package Manager (Alternative)
-```bash
-# If using uv for package management
-uv sync --python 3.8
+uv pip install agents
 ```
 
 ## 🏃 Running the API
 
 ### Start the server
 ```bash
-python api/app.py
+uv run python app.py
 ```
 
 The server will start on `http://localhost:8000`
 
 ### With hot reload (development)
 ```bash
-uvicorn api.app:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### API Documentation
@@ -229,7 +228,12 @@ Create a `Dockerfile`:
 FROM python:3.8-slim
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Install dependencies with uv
+RUN uv venv && uv pip install -r requirements.txt
 COPY . .
 CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
@@ -242,7 +246,7 @@ docker run -p 8000:8000 responses-api
 
 ## ⚠️ Important Notes
 
-### API Key Security
+### API Key Management
 - Never commit API keys to version control
 - Use environment variables in production
 - Consider implementing rate limiting
@@ -266,7 +270,7 @@ docker run -p 8000:8000 responses-api
    - The API will automatically fall back to Chat Completions
 
 2. **Research not working**
-   - Install the Agents SDK: `pip install agents`
+   - Install the Agents SDK: `uv pip install agents`
    - Verify your API key has access to required features
 
 3. **File upload errors**

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { DeepResearchPanel, ResearchResults } from '../components/DeepResearch';
 
 export default function Home() {
   const [userMessage, setUserMessage] = useState('');
@@ -9,6 +10,8 @@ export default function Home() {
   const [useResearch, setUseResearch] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentFiles, setCurrentFiles] = useState([]);
+  const [deepResearchResults, setDeepResearchResults] = useState({});
+  const [pendingDeepResearch, setPendingDeepResearch] = useState(false);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -91,6 +94,53 @@ export default function Home() {
     } catch (error) {
       console.error('Error removing file:', error);
     }
+  };
+
+  const handleDeepResearch = async (config) => {
+    try {
+      setPendingDeepResearch(true);
+      const base = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+      const res = await fetch(`${base}/api/deep-research`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setDeepResearchResults(prev => ({
+          ...prev,
+          [result.id]: result
+        }));
+        
+        // Add a message indicating research started
+        const researchMessage = {
+          role: 'assistant',
+          content: `🧪 Deep Research started (ID: ${result.id})\n\nResearching: "${config.query}"\nModel: ${config.model}\nTools: ${config.use_web_search ? '🔍 Web Search' : ''} ${config.use_code_interpreter ? '🧮 Code Interpreter' : ''}\n\nThis may take several minutes. Results will appear when complete.`,
+          isDeepResearch: true,
+          researchId: result.id,
+          timestamp: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, researchMessage]);
+        
+        return result;
+      }
+    } catch (error) {
+      console.error('Deep research error:', error);
+      alert('Failed to start deep research: ' + error.message);
+    } finally {
+      setPendingDeepResearch(false);
+    }
+  };
+
+  const handleClarificationAnswer = (answers) => {
+    // Add clarification answers to the message
+    const clarificationMessage = {
+      role: 'user',
+      content: `Clarification answers:\n${answers}`,
+      timestamp: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, clarificationMessage]);
   };
 
   const sendMessage = async () => {
@@ -300,9 +350,29 @@ export default function Home() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <h1 style={{ fontSize: '1.125rem', fontWeight: 600, color: '#ececf1' }}>ChatGPT</h1>
-          <span style={{ fontSize: '0.875rem', color: '#8e8ea0' }}>with Responses API</span>
+          <span style={{ fontSize: '0.875rem', color: '#8e8ea0' }}>with Deep Research</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <DeepResearchPanel 
+            onStartResearch={handleDeepResearch}
+            apiKey={apiKey}
+            currentQuery={userMessage}
+            onResearchComplete={(result) => {
+              // Add the completed research to the chat
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: `🎯 Deep Research Complete!\n\nQuery: ${result.query}\nDuration: ${Math.round(result.duration || 0)}s\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${result.output_text}${
+                  result.sources && result.sources.length > 0 
+                    ? '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nSources:\n' + result.sources.map((s, i) => `${i + 1}. ${s.title || 'Web page'}: ${s.url}`).join('\n')
+                    : ''
+                }`,
+                timestamp: new Date().toISOString(),
+                isDeepResearch: true,
+                researchId: result.id
+              }]);
+            }}
+            onClarificationAnswer={handleClarificationAnswer}
+          />
           <button
             onClick={startNewChat}
             style={{
@@ -417,6 +487,13 @@ export default function Home() {
                       )}
                       <div style={{ color: '#ececf1', whiteSpace: 'pre-wrap', wordWrap: 'break-word', lineHeight: 1.5 }}>
                         {msg.content || (loading && idx === messages.length - 1 && '●●●')}
+                        {msg.isDeepResearch && msg.researchId && deepResearchResults[msg.researchId] && 
+                         deepResearchResults[msg.researchId].status === 'completed' && (
+                          <ResearchResults 
+                            results={deepResearchResults[msg.researchId].output_text}
+                            sources={deepResearchResults[msg.researchId].sources}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -602,7 +679,13 @@ export default function Home() {
                 Research enabled
               </span>
             )}
-            <span>Powered by OpenAI Responses API</span>
+            {pendingDeepResearch && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#f59e0b' }}>
+                <span style={{ animation: 'pulse 2s infinite' }}>⏳</span>
+                Deep Research running...
+              </span>
+            )}
+            <span>Powered by OpenAI Responses API & Deep Research</span>
           </div>
         </div>
       </div>
