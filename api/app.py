@@ -1,23 +1,34 @@
-# Import required FastAPI components for building the API
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+"""
+Main FastAPI Application
+
+Production-ready ChatGPT clone API with OpenAI Responses API integration.
+"""
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-# Import Pydantic for data validation and settings management
-from pydantic import BaseModel
-# Import OpenAI client for interacting with OpenAI's API
+from pydantic import BaseModel, Field
 from openai import OpenAI
-import os
-import tempfile
-import asyncio
 from typing import Optional, Dict, List, Any
-import sys
 import json
-import base64
 from io import BytesIO
-import requests
 
-# Add the parent directory to the Python path to import aimakerspace
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Application configuration and utilities
+from api.config import settings
+from api.utils import (
+    logger,
+    ValidationError,
+    AuthenticationError,
+    NotFoundError,
+    OpenAIError,
+    validate_api_key,
+    validate_model_name,
+    validate_file_type,
+    validate_file_size,
+    validate_message_content,
+    validate_reasoning_effort,
+    session_manager,
+)
 
 # Import agents SDK components for research functionality
 try:
@@ -26,7 +37,7 @@ try:
     AGENTS_SDK_AVAILABLE = True
 except ImportError:
     AGENTS_SDK_AVAILABLE = False
-    print("Warning: OpenAI Agents SDK not available. Research functionality will be limited.")
+    logger.warning("OpenAI Agents SDK not available. Research functionality will be limited.")
 
 # Import deep research module
 try:
@@ -44,67 +55,71 @@ try:
     DEEP_RESEARCH_AVAILABLE = True
 except ImportError as e:
     DEEP_RESEARCH_AVAILABLE = False
-    print(f"Warning: Deep Research module not available: {e}")
+    logger.warning(f"Deep Research module not available: {e}")
 
-# Initialize FastAPI application with a title
-app = FastAPI(title="OpenAI Responses API Chat")
-
-# Configure CORS (Cross-Origin Resource Sharing) middleware
-# This allows the API to be accessed from different domains/origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows requests from any origin
-    allow_credentials=True,  # Allows cookies to be included in requests
-    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers in requests
+# Initialize FastAPI application
+app = FastAPI(
+    title=settings.api_title,
+    version=settings.api_version,
+    debug=settings.debug
 )
 
-# Global storage for file metadata and vector store IDs
-uploaded_files_metadata: Dict[str, Dict[str, Any]] = {}
-user_vector_stores: Dict[str, str] = {}  # Store vector store IDs per session/user
+# Configure CORS middleware with proper security settings
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
+)
 
-# Deep research managers (keyed by API key for simplicity)
+# Deep research managers (keyed by session ID for better security)
 deep_research_managers: Dict[str, DeepResearchManager] = {}
 clarification_agents: Dict[str, ClarificationAgent] = {}
 prompt_enrichers: Dict[str, PromptEnricher] = {}
 
-# Define the data model for chat requests
+# Request/Response Models
 class ChatRequest(BaseModel):
-    user_message: str
-    model: Optional[str] = "gpt-5"  # Default to GPT-5
-    api_key: str
-    file_ids: Optional[List[str]] = []
+    """Chat request model with validation."""
+    user_message: str = Field(..., min_length=1, max_length=100000)
+    model: Optional[str] = Field(default=settings.default_model)
+    api_key: str = Field(..., min_length=20)
+    file_ids: Optional[List[str]] = Field(default_factory=list, max_items=10)
     use_research: Optional[bool] = False
-    reasoning_effort: Optional[str] = "medium"  # low, medium, high
+    reasoning_effort: Optional[str] = Field(default=settings.default_reasoning_effort)
+    session_id: Optional[str] = None
 
-# Define the data model for research requests
 class ResearchRequest(BaseModel):
-    query: str
-    api_key: str
-    depth: Optional[str] = "medium"  # light, medium, deep
+    """Research request model."""
+    query: str = Field(..., min_length=1, max_length=5000)
+    api_key: str = Field(..., min_length=20)
+    depth: Optional[str] = Field(default="medium", pattern="^(light|medium|deep)$")
+    session_id: Optional[str] = None
 
-# Define the data model for research results
 class ResearchResult(BaseModel):
+    """Research result model."""
     query: str
     findings: List[str]
     sources: List[str]
     summary: str
 
-# Define the data model for deep research requests
 class DeepResearchApiRequest(BaseModel):
-    query: str
-    api_key: str
-    model: Optional[str] = "o3-deep-research"  # o3-deep-research or o4-mini-deep-research
+    """Deep research request model."""
+    query: str = Field(..., min_length=1, max_length=10000)
+    api_key: str = Field(..., min_length=20)
+    model: Optional[str] = Field(default="o3-deep-research")
     use_web_search: Optional[bool] = True
     use_file_search: Optional[bool] = False
     use_code_interpreter: Optional[bool] = False
     vector_store_ids: Optional[List[str]] = None
     background: Optional[bool] = True
     webhook_url: Optional[str] = None
-    max_tool_calls: Optional[int] = None
+    max_tool_calls: Optional[int] = Field(default=None, ge=1, le=100)
     clarify_first: Optional[bool] = False
     enrich_prompt: Optional[bool] = True
+    session_id: Optional[str] = None
 
+# Helper Functions
 def create_file(client: OpenAI, file_content: bytes, file_name: str) -> str:
     """
     Upload a file to OpenAI's File API.
@@ -116,9 +131,11 @@ def create_file(client: OpenAI, file_content: bytes, file_name: str) -> str:
         
     Returns:
         str: File ID from OpenAI
+        
+    Raises:
+        OpenAIError: If file upload fails
     """
     try:
-        # Create a BytesIO object from the content
         file_buffer = BytesIO(file_content)
         file_tuple = (file_name, file_buffer)
         
@@ -127,54 +144,64 @@ def create_file(client: OpenAI, file_content: bytes, file_name: str) -> str:
             purpose="assistants"
         )
         
-        print(f"File uploaded successfully. File ID: {result.id}")
+        logger.info(f"File uploaded successfully. File ID: {result.id[:8]}...")
         return result.id
     except Exception as e:
-        print(f"Error uploading file: {e}")
-        raise
+        logger.error(f"Error uploading file: {e}")
+        raise OpenAIError(f"Failed to upload file: {str(e)}")
 
-def get_or_create_vector_store(client: OpenAI, session_key: str = "default") -> str:
+def get_or_create_vector_store(client: OpenAI, session_id: str) -> str:
     """
     Get or create a vector store for the session.
     
     Args:
         client: OpenAI client instance
-        session_key: Session/user identifier
+        session_id: Session identifier
         
     Returns:
         str: Vector store ID
+        
+    Raises:
+        OpenAIError: If vector store creation fails
     """
-    global user_vector_stores
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise NotFoundError("Session not found")
     
-    # Check if we have a vector store for this session
-    if session_key in user_vector_stores:
-        store_id = user_vector_stores[session_key]
+    # Check if session already has a vector store
+    if session.get("vector_store_id"):
+        store_id = session["vector_store_id"]
         try:
             # Verify the store still exists
-            store = client.vector_stores.retrieve(store_id)
-            print(f"Using existing vector store: {store_id}")
+            client.vector_stores.retrieve(store_id)
+            logger.debug(f"Using existing vector store: {store_id[:8]}...")
             return store_id
-        except:
-            print(f"Vector store {store_id} no longer exists, creating new one")
-            del user_vector_stores[session_key]
+        except Exception:
+            logger.warning(f"Vector store {store_id[:8]}... no longer exists, creating new one")
+            session["vector_store_id"] = None
     
     # Create a new vector store
     try:
         vector_store = client.vector_stores.create(
-            name=f"Knowledge_Base_{session_key}"
+            name=f"Knowledge_Base_{session_id[:8]}"
         )
         
-        user_vector_stores[session_key] = vector_store.id
-        print(f"Created new vector store: {vector_store.id}")
+        session_manager.update_session(session_id, {"vector_store_id": vector_store.id})
+        logger.info(f"Created new vector store: {vector_store.id[:8]}...")
         return vector_store.id
     except Exception as e:
-        print(f"Error creating vector store: {e}")
-        raise
+        logger.error(f"Error creating vector store: {e}")
+        raise OpenAIError(f"Failed to create vector store: {str(e)}")
 
 def add_file_to_vector_store(client: OpenAI, file_id: str, vector_store_id: str) -> bool:
     """
     Add a file to the vector store for retrieval.
     
+    Args:
+        client: OpenAI client instance
+        file_id: File ID to add
+        vector_store_id: Vector store ID
+        
     Returns:
         bool: Success status
     """
@@ -183,95 +210,102 @@ def add_file_to_vector_store(client: OpenAI, file_id: str, vector_store_id: str)
             vector_store_id=vector_store_id,
             file_id=file_id
         )
-        print(f"File {file_id} added to vector store {vector_store_id}")
+        logger.info(f"File {file_id[:8]}... added to vector store {vector_store_id[:8]}...")
         return True
     except Exception as e:
-        print(f"Error adding file to vector store: {e}")
+        logger.error(f"Error adding file to vector store: {e}")
         return False
 
-# Define the main chat endpoint using Responses API
+# Chat Endpoint
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
+    """
+    Main chat endpoint with streaming responses.
+    
+    Validates input, manages sessions, and streams responses from OpenAI.
+    """
     try:
-        # Initialize OpenAI client with the provided API key
-        client = OpenAI(api_key=request.api_key)
+        # Validate inputs
+        api_key = validate_api_key(request.api_key)
+        model = validate_model_name(request.model) if request.model else settings.default_model
+        message_content = validate_message_content(request.user_message)
+        reasoning_effort = validate_reasoning_effort(request.reasoning_effort)
+        
+        # Get or create session
+        session_id = request.session_id
+        if not session_id:
+            session_id = session_manager.create_session(api_key)
+        else:
+            session = session_manager.get_session(session_id)
+            if not session:
+                raise NotFoundError("Session not found or expired")
+        
+        # Initialize OpenAI client
+        client = OpenAI(api_key=api_key)
         
         # Prepare input content
-        input_content = request.user_message
+        input_content = message_content
         
         # Perform research if requested
-        research_context = ""
         if request.use_research and AGENTS_SDK_AVAILABLE:
             try:
-                research_result = await perform_light_research(request.user_message, request.api_key)
+                research_result = await perform_light_research(message_content, api_key)
                 if research_result:
                     research_context = f"\n\nResearch findings:\n{research_result}"
                     input_content += research_context
             except Exception as e:
-                print(f"Research failed: {e}")
+                logger.warning(f"Research failed: {e}")
         
-        # Create an async generator function for streaming responses
+        # Create async generator for streaming responses
         async def generate():
             try:
                 # Check if we have files and need to use vector store
                 tools = []
                 if request.file_ids and len(request.file_ids) > 0:
-                    # Get the vector store ID for this session
-                    # In production, you'd want to use a proper session identifier
-                    session_key = request.api_key[-8:]  # Use last 8 chars of API key as session ID
-                    
-                    # Check if we have a vector store with these files
-                    vector_store_id = None
-                    for file_id in request.file_ids:
-                        if file_id in uploaded_files_metadata:
-                            file_meta = uploaded_files_metadata[file_id]
-                            if 'vector_store_id' in file_meta and file_meta['vector_store_id']:
-                                vector_store_id = file_meta['vector_store_id']
-                                break
-                    
-                    if vector_store_id:
-                        # Use file_search tool with the vector store
+                    session = session_manager.get_session(session_id)
+                    if session and session.get("vector_store_id"):
+                        vector_store_id = session["vector_store_id"]
                         tools = [{
                             "type": "file_search",
                             "vector_store_ids": [vector_store_id]
                         }]
-                        print(f"Using vector store {vector_store_id} for file search")
+                        logger.debug(f"Using vector store {vector_store_id[:8]}... for file search")
                 
                 # Try the Responses API with tools if available
-                use_responses_api = request.model in ["gpt-5", "gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
+                use_responses_api = model in ["gpt-5", "gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
                 
                 if use_responses_api:
                     try:
-                        print(f"Attempting Responses API with model: {request.model}")
+                        logger.debug(f"Attempting Responses API with model: {model}")
                         
                         # Build the request parameters
                         params = {
-                            "model": request.model,
+                            "model": model,
                             "input": input_content,
-                            "reasoning": {"effort": request.reasoning_effort},
+                            "reasoning": {"effort": reasoning_effort},
                             "instructions": "You are a helpful assistant. When files are provided, use the file_search tool to find relevant information from the uploaded documents. When research context is provided, use it to enhance your answer."
                         }
                         
                         # Add tools if we have them
                         if tools:
                             params["tools"] = tools
-                            print(f"Added tools to Responses API: {tools}")
+                            logger.debug(f"Added tools to Responses API: {tools}")
                         
                         response = client.responses.create(**params)
                         
                         # Check if response has output_text
-                        if hasattr(response, 'output_text'):
+                        if hasattr(response, 'output_text') and response.output_text:
                             yield response.output_text
                         else:
-                            yield str(response)
+                            yield str(response) if response else "No response generated"
                         return
                     except Exception as e:
-                        print(f"Responses API failed: {e}, falling back to alternatives")
+                        logger.warning(f"Responses API failed: {e}, falling back to alternatives")
                 
                 # Fallback to Assistant API if we have files
                 if request.file_ids and len(request.file_ids) > 0:
                     try:
-                        print("Using Assistant API for file handling")
+                        logger.debug("Using Assistant API for file handling")
                         
                         # Create an assistant with file_search tool
                         assistant = client.assistants.create(
@@ -316,36 +350,47 @@ async def chat(request: ChatRequest):
                         # Clean up assistant
                         try:
                             client.assistants.delete(assistant.id)
-                        except:
+                        except Exception:
                             pass
                             
                     except Exception as assistant_error:
-                        print(f"Assistant API error: {assistant_error}")
+                        logger.warning(f"Assistant API error: {assistant_error}")
                         # Fall back to standard chat
-                        async for chunk in standard_chat_completion(client, input_content, request.model):
+                        async for chunk in standard_chat_completion(client, input_content, model):
                             yield chunk
                 else:
                     # Standard chat completion without files
-                    async for chunk in standard_chat_completion(client, input_content, request.model):
+                    async for chunk in standard_chat_completion(client, input_content, model):
                         yield chunk
                     
             except Exception as e:
-                print(f"Chat generation error: {e}")
+                logger.error(f"Chat generation error: {e}")
                 yield f"Error: {str(e)}"
 
         # Return a streaming response to the client
         return StreamingResponse(generate(), media_type="text/plain")
     
+    except ValidationError as e:
+        raise
     except Exception as e:
-        # Handle any errors that occur during processing
-        print(f"Chat endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Chat endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred processing your request")
 
 async def standard_chat_completion(client: OpenAI, content: str, model: str):
-    """Standard chat completion helper"""
+    """
+    Standard chat completion helper with fallback models.
+    
+    Args:
+        client: OpenAI client instance
+        content: Message content
+        model: Preferred model name
+        
+    Yields:
+        str: Response chunks
+    """
     try:
         # Use a fallback model if the requested one doesn't work
-        models_to_try = [model, "gpt-5", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+        models_to_try = [model, "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
         
         for model_name in models_to_try:
             try:
@@ -359,46 +404,67 @@ async def standard_chat_completion(client: OpenAI, content: str, model: str):
                 )
                 
                 for chunk in stream:
-                    if chunk.choices[0].delta.content is not None:
+                    if chunk.choices and chunk.choices[0].delta.content is not None:
                         yield chunk.choices[0].delta.content
                 break
             except Exception as model_error:
-                print(f"Model {model_name} failed: {model_error}")
+                logger.warning(f"Model {model_name} failed: {model_error}")
                 if model_name == models_to_try[-1]:
                     yield f"Error: All models failed. Last error: {str(model_error)}"
     except Exception as e:
+        logger.error(f"Error in chat completion: {e}")
         yield f"Error in chat completion: {str(e)}"
 
-# Research endpoint using OpenAI Agents SDK
+# Research Endpoint
 @app.post("/api/research")
 async def research(request: ResearchRequest):
+    """
+    Research endpoint using OpenAI chat completion.
+    
+    Provides comprehensive research insights on a given topic.
+    """
     try:
-        client = OpenAI(api_key=request.api_key)
+        api_key = validate_api_key(request.api_key)
+        query = validate_message_content(request.query, max_length=5000)
+        
+        client = OpenAI(api_key=api_key)
         
         # Simple research using chat completion
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a research assistant. Provide comprehensive insights on the given topic."},
-                {"role": "user", "content": f"Research the following topic and provide insights: {request.query}"}
+                {"role": "user", "content": f"Research the following topic and provide insights: {query}"}
             ]
         )
         
         output_text = response.choices[0].message.content
         
         return ResearchResult(
-            query=request.query,
+            query=query,
             findings=[output_text],
             sources=["OpenAI Analysis"],
             summary=output_text[:500] + "..." if len(output_text) > 500 else output_text
         )
         
+    except ValidationError:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Research error: {str(e)}")
+        logger.error(f"Research error: {e}", exc_info=True)
+        raise OpenAIError(f"Research failed: {str(e)}")
 
 # Helper function for light research
 async def perform_light_research(query: str, api_key: str) -> str:
-    """Perform light research on a topic"""
+    """
+    Perform light research on a topic.
+    
+    Args:
+        query: Research query
+        api_key: OpenAI API key
+        
+    Returns:
+        str: Research insights or empty string on failure
+    """
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
@@ -411,62 +477,109 @@ async def perform_light_research(query: str, api_key: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Light research failed: {e}")
+        logger.warning(f"Light research failed: {e}")
         return ""
 
-# File upload endpoint using OpenAI Files API and Vector Stores
+# File Upload Endpoint
 @app.post("/api/upload-file")
 async def upload_file(
     file: UploadFile = File(...),
-    api_key: str = Form(...)
+    api_key: str = Form(...),
+    session_id: Optional[str] = Form(None)
 ):
+    """
+    Upload a file to OpenAI and add it to a vector store.
+    
+    Validates file type and size, uploads to OpenAI, and manages session state.
+    """
     try:
-        # Initialize OpenAI client
-        client = OpenAI(api_key=api_key)
+        # Validate inputs
+        api_key = validate_api_key(api_key)
+        filename = validate_file_type(file.filename)
         
         # Read file content
         content = await file.read()
+        file_size = validate_file_size(len(content))
+        
+        # Get or create session
+        if not session_id:
+            session_id = session_manager.create_session(api_key)
+        else:
+            session = session_manager.get_session(session_id)
+            if not session:
+                raise NotFoundError("Session not found or expired")
+        
+        # Check file count limit
+        session = session_manager.get_session(session_id)
+        if session and len(session.get("files", {})) >= settings.max_files_per_session:
+            raise ValidationError(
+                f"Maximum file limit ({settings.max_files_per_session}) reached for this session"
+            )
+        
+        # Initialize OpenAI client
+        client = OpenAI(api_key=api_key)
         
         # Upload to OpenAI Files API
-        openai_file_id = create_file(client, content, file.filename)
+        openai_file_id = create_file(client, content, filename)
         
         # Create or get vector store for this session
-        # In production, use proper session management
-        session_key = api_key[-8:]  # Use last 8 chars of API key as session ID
-        vector_store_id = get_or_create_vector_store(client, session_key)
+        vector_store_id = get_or_create_vector_store(client, session_id)
         
         # Add file to vector store
         success = add_file_to_vector_store(client, openai_file_id, vector_store_id)
         
         if not success:
-            print(f"Warning: File uploaded but not added to vector store")
+            logger.warning(f"File {openai_file_id[:8]}... uploaded but not added to vector store")
         
-        # Store metadata for reference
-        uploaded_files_metadata[openai_file_id] = {
-            'name': file.filename,
+        # Store metadata in session
+        file_metadata = {
+            'name': filename,
             'openai_id': openai_file_id,
-            'size': len(content),
+            'size': file_size,
             'content_type': file.content_type,
-            'vector_store_id': vector_store_id,
-            'session_key': session_key
+            'vector_store_id': vector_store_id
         }
+        
+        session = session_manager.get_session(session_id)
+        if session:
+            if "files" not in session:
+                session["files"] = {}
+            session["files"][openai_file_id] = file_metadata
+            session_manager.update_session(session_id, session)
         
         return {
             "message": "File uploaded successfully to OpenAI and added to vector store",
             "file_id": openai_file_id,
-            "filename": file.filename,
-            "size": len(content),
+            "filename": filename,
+            "size": file_size,
             "file_type": "document",
-            "vector_store_id": vector_store_id
+            "vector_store_id": vector_store_id,
+            "session_id": session_id
         }
         
+    except ValidationError:
+        raise
     except Exception as e:
-        print(f"File upload error: {e}")
+        logger.error(f"File upload error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
-# Get uploaded files list
+# Get Uploaded Files List
 @app.get("/api/files")
-async def get_files():
+async def get_files(session_id: Optional[str] = Query(None)):
+    """
+    Get list of uploaded files for a session.
+    
+    Args:
+        session_id: Optional session ID. If not provided, returns empty list.
+    """
+    if not session_id:
+        return {"files": []}
+    
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise NotFoundError("Session not found or expired")
+    
+    files = session.get("files", {})
     return {
         "files": [
             {
@@ -476,78 +589,124 @@ async def get_files():
                 "openai_id": file_info.get('openai_id', file_id),
                 "vector_store_id": file_info.get('vector_store_id')
             }
-            for file_id, file_info in uploaded_files_metadata.items()
+            for file_id, file_info in files.items()
         ]
     }
 
-# Delete a file
+# Delete a File
 @app.delete("/api/files/{file_id}")
-async def delete_file(file_id: str):
-    if file_id in uploaded_files_metadata:
+async def delete_file(file_id: str, session_id: Optional[str] = Query(None)):
+    """
+    Delete a file from the session.
+    
+    Args:
+        file_id: File ID to delete
+        session_id: Session ID containing the file
+    """
+    if not session_id:
+        raise ValidationError("Session ID is required")
+    
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise NotFoundError("Session not found or expired")
+    
+    files = session.get("files", {})
+    if file_id in files:
         try:
-            # Note: We're not deleting from OpenAI to avoid issues
-            # Just remove from local metadata
-            del uploaded_files_metadata[file_id]
+            del files[file_id]
+            session["files"] = files
+            session_manager.update_session(session_id, session)
             return {"message": "File removed from session"}
         except Exception as e:
+            logger.error(f"Error removing file: {e}")
             raise HTTPException(status_code=500, detail=f"Error removing file: {str(e)}")
     else:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise NotFoundError("File not found in session")
 
-# Clear session endpoint - resets vector stores and files
+# Clear Session Endpoint
 @app.post("/api/clear-session")
-async def clear_session(api_key: str = Form(...)):
-    """Clear the session, removing vector stores and file metadata"""
+async def clear_session(
+    api_key: str = Form(...),
+    session_id: Optional[str] = Form(None)
+):
+    """
+    Clear the session, removing vector stores and file metadata.
+    
+    Args:
+        api_key: User's API key
+        session_id: Optional session ID. If not provided, creates a new session.
+    """
     try:
-        # Get session key
-        session_key = api_key[-8:]
+        api_key = validate_api_key(api_key)
         
-        # Clear vector store for this session
-        if session_key in user_vector_stores:
-            vector_store_id = user_vector_stores[session_key]
+        if session_id:
+            session = session_manager.get_session(session_id)
+            if not session:
+                raise NotFoundError("Session not found or expired")
             
-            # Try to delete the vector store from OpenAI (optional)
-            try:
-                client = OpenAI(api_key=api_key)
-                client.vector_stores.delete(vector_store_id)
-                print(f"Deleted vector store {vector_store_id}")
-            except Exception as e:
-                print(f"Could not delete vector store {vector_store_id}: {e}")
+            # Try to delete the vector store from OpenAI
+            vector_store_id = session.get("vector_store_id")
+            if vector_store_id:
+                try:
+                    client = OpenAI(api_key=api_key)
+                    client.vector_stores.delete(vector_store_id)
+                    logger.info(f"Deleted vector store {vector_store_id[:8]}...")
+                except Exception as e:
+                    logger.warning(f"Could not delete vector store {vector_store_id[:8]}...: {e}")
             
-            # Remove from our tracking
-            del user_vector_stores[session_key]
+            # Delete the session
+            files_count = len(session.get("files", {}))
+            session_manager.delete_session(session_id)
+            
+            return {
+                "message": "Session cleared successfully",
+                "files_removed": files_count,
+                "vector_store_cleared": vector_store_id is not None
+            }
+        else:
+            # Create a new session (effectively clearing by starting fresh)
+            new_session_id = session_manager.create_session(api_key)
+            return {
+                "message": "New session created",
+                "session_id": new_session_id
+            }
         
-        # Clear files associated with this session
-        files_to_remove = []
-        for file_id, file_info in uploaded_files_metadata.items():
-            if file_info.get('session_key') == session_key:
-                files_to_remove.append(file_id)
-        
-        for file_id in files_to_remove:
-            del uploaded_files_metadata[file_id]
-        
-        return {
-            "message": "Session cleared successfully",
-            "files_removed": len(files_to_remove),
-            "vector_store_cleared": session_key in user_vector_stores
-        }
-        
+    except ValidationError:
+        raise
     except Exception as e:
-        print(f"Error clearing session: {e}")
+        logger.error(f"Error clearing session: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error clearing session: {str(e)}")
 
-# Get vector store info
+# Get Vector Store Info
 @app.get("/api/vector-stores")
-async def get_vector_stores():
-    """Get information about active vector stores"""
+async def get_vector_stores(session_id: Optional[str] = Query(None)):
+    """
+    Get information about active vector stores for a session.
+    
+    Args:
+        session_id: Optional session ID
+    """
+    if not session_id:
+        return {
+            "vector_stores": {},
+            "file_mappings": {}
+        }
+    
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise NotFoundError("Session not found or expired")
+    
+    vector_store_id = session.get("vector_store_id")
+    files = session.get("files", {})
+    
     return {
-        "vector_stores": user_vector_stores,
+        "vector_store_id": vector_store_id,
         "file_mappings": {
             file_id: {
                 "name": file_info['name'],
                 "vector_store_id": file_info.get('vector_store_id')
             }
-            for file_id, file_info in uploaded_files_metadata.items()
+            for file_id, file_info in files.items()
         }
     }
 
@@ -720,23 +879,52 @@ async def handle_webhook(data: Dict[str, Any]):
         print(f"Webhook error: {e}")
         return {"status": "error", "detail": str(e)}
 
-# Define a health check endpoint to verify API status
+# Health Check Endpoint
 @app.get("/api/health")
 async def health_check():
+    """
+    Health check endpoint to verify API status.
+    
+    Returns status of all major components and active sessions.
+    """
+    active_sessions = len([s for s in session_manager._sessions.values()])
+    active_research = (
+        sum(len(manager.active_research) for manager in deep_research_managers.values())
+        if DEEP_RESEARCH_AVAILABLE else 0
+    )
+    
     return {
         "status": "ok",
+        "version": settings.api_version,
         "responses_api": "enabled",
-        "research": "enabled",
+        "research": "enabled" if AGENTS_SDK_AVAILABLE else "limited",
         "deep_research": "enabled" if DEEP_RESEARCH_AVAILABLE else "disabled",
         "file_upload": "enabled",
         "vector_stores": "enabled",
-        "active_vector_stores": len(user_vector_stores),
-        "uploaded_files": len(uploaded_files_metadata),
-        "active_deep_research": sum(len(manager.active_research) for manager in deep_research_managers.values()) if DEEP_RESEARCH_AVAILABLE else 0
+        "active_sessions": active_sessions,
+        "active_deep_research": active_research
     }
+
+# Startup and Shutdown Events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup."""
+    logger.info(f"Starting {settings.api_title} v{settings.api_version}")
+    logger.info(f"Debug mode: {settings.debug}")
+    logger.info(f"CORS origins: {settings.cors_origins}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    logger.info("Shutting down application")
+    session_manager.cleanup_expired_sessions()
 
 # Entry point for running the application directly
 if __name__ == "__main__":
     import uvicorn
-    # Start the server on all network interfaces (0.0.0.0) on port 8000
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=settings.host,
+        port=settings.port,
+        log_level=settings.log_level.lower()
+    )
