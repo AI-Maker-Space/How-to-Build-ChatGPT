@@ -149,6 +149,16 @@ Delete an uploaded file.
 
 ### Health Check
 
+#### `GET /health`
+Simple health check for load balancers.
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```
+
 #### `GET /api/health`
 Check API status and available features.
 
