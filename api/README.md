@@ -149,6 +149,16 @@ Delete an uploaded file.
 
 ### Health Check
 
+#### `GET /health`
+Lightweight ping endpoint for uptime monitors and load balancers.
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```
+
 #### `GET /api/health`
 Check API status and available features.
 
@@ -157,8 +167,13 @@ Check API status and available features.
 {
   "status": "ok",
   "responses_api": "enabled",
-  "research": "enabled",  // or "limited" if Agents SDK not available
-  "file_upload": "enabled"
+  "research": "enabled",
+  "deep_research": "enabled",
+  "file_upload": "enabled",
+  "vector_stores": "enabled",
+  "active_vector_stores": 0,
+  "uploaded_files": 0,
+  "active_deep_research": 0
 }
 ```
 

@@ -121,6 +121,7 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
 - `POST /api/upload-file` - File upload endpoint
 - `GET /api/files` - List uploaded files
 - `DELETE /api/files/{id}` - Delete a file
+- `GET /health` - Lightweight health check for load balancers
 - `GET /api/health` - Health check
 
 ## 📚 How to Build ChatGPT Series
