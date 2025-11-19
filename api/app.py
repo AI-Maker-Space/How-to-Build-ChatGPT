@@ -720,6 +720,12 @@ async def handle_webhook(data: Dict[str, Any]):
         print(f"Webhook error: {e}")
         return {"status": "error", "detail": str(e)}
 
+# Define a simple health check endpoint for infrastructure monitoring
+@app.get("/health")
+async def health():
+    """Simple health check endpoint for load balancers and monitoring tools"""
+    return {"status": "ok"}
+
 # Define a health check endpoint to verify API status
 @app.get("/api/health")
 async def health_check():
