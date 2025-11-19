@@ -720,9 +720,14 @@ async def handle_webhook(data: Dict[str, Any]):
         print(f"Webhook error: {e}")
         return {"status": "error", "detail": str(e)}
 
-# Define a health check endpoint to verify API status
-@app.get("/api/health")
-async def health_check():
+def _health_snapshot() -> Dict[str, Any]:
+    """Build a reusable health status payload."""
+    active_research = 0
+    if DEEP_RESEARCH_AVAILABLE:
+        active_research = sum(
+            len(manager.active_research) for manager in deep_research_managers.values()
+        )
+
     return {
         "status": "ok",
         "responses_api": "enabled",
@@ -732,8 +737,21 @@ async def health_check():
         "vector_stores": "enabled",
         "active_vector_stores": len(user_vector_stores),
         "uploaded_files": len(uploaded_files_metadata),
-        "active_deep_research": sum(len(manager.active_research) for manager in deep_research_managers.values()) if DEEP_RESEARCH_AVAILABLE else 0
+        "active_deep_research": active_research,
     }
+
+
+@app.get("/health")
+async def root_health():
+    """Lightweight health endpoint for load balancers and uptime monitors."""
+    snapshot = _health_snapshot()
+    return {"status": snapshot["status"]}
+
+
+# Define a health check endpoint to verify API status
+@app.get("/api/health")
+async def health_check():
+    return _health_snapshot()
 
 # Entry point for running the application directly
 if __name__ == "__main__":
